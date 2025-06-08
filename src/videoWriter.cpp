@@ -101,7 +101,7 @@ void saveGenerationVideo(unsigned generation, std::vector<cv::Mat> &imageList)
     if (imageList.size() > 0)
     {
         fs::path videoPath = BASE_DIR / "videos" / ("gen-" + std::to_string(generation) + ".avi");
-        cv::VideoWriter saveVideo(videoPath.string(), cv::VideoWriter::fourcc('X', '2', '6', '4'), 25, imageList[0].size(), true);
+        cv::VideoWriter saveVideo(videoPath.string(), cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 25, imageList[0].size(), true);
         for (cv::Mat &frame : imageList)
         {
             saveVideo.write(frame);
