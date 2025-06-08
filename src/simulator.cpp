@@ -194,8 +194,8 @@ float Indiv::getSensor(uint16_t sensorNum)
         }
         break;
     }
-        return sensorVal;
     }
+    return sensorVal;
 }
 
 std::vector<float> Indiv::feedForward()

@@ -93,7 +93,7 @@ extern Grid grid;
 class Peeps
 {
 public:
-    Peeps(){};
+    Peeps() {};
     void init(unsigned population)
     {
         individuals.resize(population + 1);

@@ -2,6 +2,7 @@
 #define GENOME_H_INCLUDED
 
 #include <vector>
+#include <cstdint>
 
 constexpr uint8_t SENSOR = 1;
 constexpr uint8_t ACTION = 1;

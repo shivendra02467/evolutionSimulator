@@ -1,14 +1,17 @@
 #include <fstream>
 #include "simulator.h"
 #include "videoWriter.h"
+#include <filesystem>
+namespace fs = std::filesystem;
+
+const fs::path BASE_DIR = fs::current_path().parent_path() / "visuals";
 
 void nnetGraph(unsigned generation)
 {
     for (uint16_t index = 1; index <= 3; ++index)
     {
-        std::stringstream graphFilename;
-        graphFilename << "C:\\Users\\Kush\\Documents\\My Files\\MY PROJECTS\\evolution_simulator\\images\\nnetGraph\\nnetText\\gen-" << std::setw(6) << std::setfill('0') << generation << "-index-" << index << ".txt ";
-        std::ofstream outputFile(graphFilename.str());
+        fs::path graphPath = BASE_DIR / "nnetGraph" / "nnetText" / ("gen-" + std::to_string(generation) + "-index-" + std::to_string(index) + ".txt");
+        std::ofstream outputFile(graphPath);
         for (auto &conn : peeps[index].nnet.connections)
         {
             if (conn.sourceType == SENSOR)
@@ -97,9 +100,8 @@ void saveGenerationVideo(unsigned generation, std::vector<cv::Mat> &imageList)
 {
     if (imageList.size() > 0)
     {
-        std::stringstream videoFilename;
-        videoFilename << "C:\\Users\\Kush\\Documents\\My Files\\MY PROJECTS\\evolution_simulator\\images\\gen-" << std::setw(6) << std::setfill('0') << generation << ".avi";
-        cv::VideoWriter saveVideo(videoFilename.str(), cv::VideoWriter::fourcc('X', '2', '6', '4'), 25, imageList[0].size(), true);
+        fs::path videoPath = BASE_DIR / "videos" / ("gen-" + std::to_string(generation) + ".avi");
+        cv::VideoWriter saveVideo(videoPath.string(), cv::VideoWriter::fourcc('X', '2', '6', '4'), 25, imageList[0].size(), true);
         for (cv::Mat &frame : imageList)
         {
             saveVideo.write(frame);
@@ -110,7 +112,6 @@ void saveGenerationVideo(unsigned generation, std::vector<cv::Mat> &imageList)
 
 void saveGenerationImage(unsigned generation, std::vector<cv::Mat> &imageList)
 {
-    std::stringstream imageFilename;
-    imageFilename << "C:\\Users\\Kush\\Documents\\My Files\\MY PROJECTS\\evolution_simulator\\images\\gen-" << std::setw(6) << std::setfill('0') << generation << ".jpg";
-    cv::imwrite(imageFilename.str(), imageList.back());
+    fs::path imagePath = BASE_DIR / "images" / ("gen-" + std::to_string(generation) + ".jpg");
+    cv::imwrite(imagePath.string(), imageList.back());
 }
