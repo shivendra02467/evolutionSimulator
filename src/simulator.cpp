@@ -335,6 +335,7 @@ void simulator()
     {
         while (generation < 100)
         {
+            std::vector<cv::Mat> imageList;
             for (unsigned simStep = 0; simStep < 300; ++simStep)
             {
 #pragma omp for schedule(auto)
@@ -344,10 +345,7 @@ void simulator()
                     simStepAction(peeps[indivIndex]);
                 }
 #pragma omp single
-                {
-                    std::vector<cv::Mat> imageList;
-                    saveVideoFrame(simStep, generation, imageList);
-                }
+                saveVideoFrame(simStep, generation, imageList);
             }
 #pragma omp single
             {
