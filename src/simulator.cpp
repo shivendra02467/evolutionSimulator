@@ -1,4 +1,5 @@
 #include <random>
+#include "omp.h"
 #include "simulator.h"
 #include "videoWriter.h"
 
@@ -48,8 +49,12 @@ Dir Coord::asDir()
 
 uint32_t randomUint()
 {
-    std::random_device seed;
-    std::mt19937 generator(seed());
+    static thread_local std::mt19937 generator(
+        []
+        {
+            std::random_device seed;
+            return seed();
+        }());
     std::uniform_int_distribution<uint32_t> distribution(0, std::numeric_limits<uint32_t>::max());
     return distribution(generator);
 }
@@ -326,67 +331,76 @@ void simulator()
         peeps[index].initialize(index, grid.findEmptyLocation(), makeRandomGenome());
         nnetGraph(generation);
     }
-
-    while (generation < 100)
+#pragma omp parallel num_threads(4) default(shared)
     {
-        std::vector<cv::Mat> imageList;
-        for (unsigned simStep = 0; simStep < 300; ++simStep)
+        while (generation < 100)
         {
-            for (unsigned indivIndex = 1; indivIndex <= 3000; ++indivIndex)
+            for (unsigned simStep = 0; simStep < 300; ++simStep)
             {
-                peeps[indivIndex].age++;
-                simStepAction(peeps[indivIndex]);
+#pragma omp for schedule(auto)
+                for (unsigned indivIndex = 1; indivIndex <= 3000; ++indivIndex)
+                {
+                    peeps[indivIndex].age++;
+                    simStepAction(peeps[indivIndex]);
+                }
+#pragma omp single
+                {
+                    std::vector<cv::Mat> imageList;
+                    saveVideoFrame(simStep, generation, imageList);
+                }
             }
-            saveVideoFrame(simStep, generation, imageList);
-        }
-        if (generation % 20 == 0 || generation == 99)
-        {
-            saveGenerationVideo(generation, imageList);
-        }
-        saveGenerationImage(generation, imageList);
-
-        std::vector<uint16_t> parents;
-        std::vector<Genome> parentGenomes;
-        for (uint16_t index = 1; index <= 3000; ++index)
-        {
-            // #####################################################################################################################
-            bool passed = peeps[index].loc.x > 128 / 2;
-            // bool passed = peeps[index].loc.x < 128 / 2 && peeps[index].loc.y < 128 / 2;
-            // bool passed = peeps[index].loc.x < 128 - 32 && peeps[index].loc.x > 32 && peeps[index].loc.y < 128 - 32 && peeps[index].loc.y > 32;
-
-            if (passed && !peeps[index].nnet.connections.empty())
+#pragma omp single
             {
-                parents.push_back(index);
-            }
-        }
-        for (const uint16_t &parent : parents)
-        {
-            parentGenomes.push_back(peeps[parent].genome);
-        }
-        if (!parentGenomes.empty())
-        {
-            grid.zeroFill();
-            grid.createBarrier();
+                if (generation % 5 == 0 || generation == 99)
+                {
+                    saveGenerationVideo(generation, imageList);
+                }
+                saveGenerationImage(generation, imageList);
 
-            for (uint16_t index = 1; index <= 3000; ++index)
-            {
-                peeps[index].initialize(index, grid.findEmptyLocation(), generateChildGenome(parentGenomes));
-                nnetGraph(generation);
-            }
-        }
-        else
-        {
-            grid.zeroFill();
-            grid.createBarrier();
+                std::vector<uint16_t> parents;
+                std::vector<Genome> parentGenomes;
+                for (uint16_t index = 1; index <= 3000; ++index)
+                {
+                    // #####################################################################################################################
+                    bool passed = peeps[index].loc.x > 128 / 2;
+                    // bool passed = peeps[index].loc.x < 128 / 2 && peeps[index].loc.y < 128 / 2;
+                    // bool passed = peeps[index].loc.x < 128 - 32 && peeps[index].loc.x > 32 && peeps[index].loc.y < 128 - 32 && peeps[index].loc.y > 32;
 
-            for (uint16_t index = 1; index <= 3000; ++index)
-            {
-                peeps[index].initialize(index, grid.findEmptyLocation(), makeRandomGenome());
-                nnetGraph(generation);
+                    if (passed && !peeps[index].nnet.connections.empty())
+                    {
+                        parents.push_back(index);
+                    }
+                }
+                for (const uint16_t &parent : parents)
+                {
+                    parentGenomes.push_back(peeps[parent].genome);
+                }
+                if (!parentGenomes.empty())
+                {
+                    grid.zeroFill();
+                    grid.createBarrier();
+
+                    for (uint16_t index = 1; index <= 3000; ++index)
+                    {
+                        peeps[index].initialize(index, grid.findEmptyLocation(), generateChildGenome(parentGenomes));
+                        nnetGraph(generation);
+                    }
+                }
+                else
+                {
+                    grid.zeroFill();
+                    grid.createBarrier();
+
+                    for (uint16_t index = 1; index <= 3000; ++index)
+                    {
+                        peeps[index].initialize(index, grid.findEmptyLocation(), makeRandomGenome());
+                        nnetGraph(generation);
+                    }
+                }
+                unsigned numberSurvivors = parentGenomes.size();
+                std::cout << (numberSurvivors * 100) / (float)3000 << std::endl;
+                generation++;
             }
         }
-        unsigned numberSurvivors = parentGenomes.size();
-        std::cout << (numberSurvivors * 100) / (float)3000 << std::endl;
-        generation++;
     }
 }
