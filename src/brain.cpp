@@ -207,7 +207,7 @@ void Indiv::createWiringFromGenome()
 void randomBitFlip(Genome &genome)
 {
     unsigned Index = randomUint() % genome.size();
-    uint64_t Bits = (genome[Index].weight << 32) | (genome[Index].sourceType << 31) | (genome[Index].sourceNum << 16) | (genome[Index].sinkType << 15) | (genome[Index].sinkNum);
+    uint64_t Bits = ((uint64_t)genome[Index].weight << 32) | ((uint64_t)genome[Index].sourceType << 31) | ((uint64_t)genome[Index].sourceNum << 16) | ((uint64_t)genome[Index].sinkType << 15) | ((uint64_t)genome[Index].sinkNum);
     unsigned bitIndex = randomUint() % 48;
     Bits ^= 1 << bitIndex;
     genome[Index].sinkNum = Bits & 0x8000;
