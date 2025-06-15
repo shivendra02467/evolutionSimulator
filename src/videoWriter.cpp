@@ -11,6 +11,7 @@ void nnetGraph(unsigned generation)
     for (uint16_t index = 1; index <= 3; ++index)
     {
         fs::path graphPath = BASE_DIR / "nnetGraph" / "nnetText" / ("gen-" + std::to_string(generation) + "-index-" + std::to_string(index) + ".txt");
+        fs::create_directories(graphPath.parent_path());
         std::ofstream outputFile(graphPath);
         for (auto &conn : peeps[index].nnet.connections)
         {
@@ -101,6 +102,7 @@ void saveGenerationVideo(unsigned generation, std::vector<cv::Mat> &imageList)
     if (imageList.size() > 0)
     {
         fs::path videoPath = BASE_DIR / "videos" / ("gen-" + std::to_string(generation) + ".avi");
+        fs::create_directories(videoPath.parent_path());
         cv::VideoWriter saveVideo(videoPath.string(), cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 25, imageList[0].size(), true);
         for (cv::Mat &frame : imageList)
         {
@@ -113,5 +115,6 @@ void saveGenerationVideo(unsigned generation, std::vector<cv::Mat> &imageList)
 void saveGenerationImage(unsigned generation, std::vector<cv::Mat> &imageList)
 {
     fs::path imagePath = BASE_DIR / "images" / ("gen-" + std::to_string(generation) + ".jpg");
+    fs::create_directories(imagePath.parent_path());
     cv::imwrite(imagePath.string(), imageList.back());
 }
