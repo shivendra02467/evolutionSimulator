@@ -331,11 +331,11 @@ void simulator()
         peeps[index].initialize(index, grid.findEmptyLocation(), makeRandomGenome());
         nnetGraph(generation);
     }
+    std::vector<cv::Mat> imageList;
 #pragma omp parallel num_threads(4) default(shared)
     {
         while (generation < 100)
         {
-            std::vector<cv::Mat> imageList;
             for (unsigned simStep = 0; simStep < 300; ++simStep)
             {
 #pragma omp for schedule(auto)
@@ -349,12 +349,9 @@ void simulator()
             }
 #pragma omp single
             {
-                if (generation % 5 == 0 || generation == 99)
-                {
-                    saveGenerationVideo(generation, imageList);
-                }
+                saveGenerationVideo(generation, imageList);
                 saveGenerationImage(generation, imageList);
-
+                imageList.clear();
                 std::vector<uint16_t> parents;
                 std::vector<Genome> parentGenomes;
                 for (uint16_t index = 1; index <= 3000; ++index)
