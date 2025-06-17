@@ -2,37 +2,38 @@
 #include "simulator.hpp"
 #include "video_writer.hpp"
 #include <filesystem>
+
 namespace fs = std::filesystem;
 
 const fs::path BASE_DIR = fs::current_path().parent_path() / "visuals";
 
-void draw_nnet(unsigned generation)
+void draw_nnet(int generation)
 {
-    for (uint16_t index = 1; index <= 3; ++index)
+    for (int index = 1; index <= 3; ++index)
     {
         fs::path graph_path = BASE_DIR / "draw_nnet" / "nnetText" / ("gen-" + std::to_string(generation) + "-index-" + std::to_string(index) + ".txt");
         fs::create_directories(graph_path.parent_path());
         std::ofstream output_file(graph_path);
-        for (auto &conn : peeps[index].nnet.connections)
+        for (auto &edge : peeps[index].nnet.edges)
         {
-            if (conn.source_type == SENSOR)
+            if (edge.source_type == SENSOR)
             {
-                output_file << "S" << std::to_string(conn.source_num) << " ";
+                output_file << "S" << std::to_string(edge.source_num) << " ";
             }
             else
             {
-                output_file << "N" << std::to_string(conn.source_num) << " ";
+                output_file << "N" << std::to_string(edge.source_num) << " ";
             }
 
-            if (conn.sink_type == ACTION)
+            if (edge.sink_type == ACTION)
             {
-                output_file << "A" + std::to_string(conn.sink_num) << " ";
+                output_file << "A" + std::to_string(edge.sink_num) << " ";
             }
             else
             {
-                output_file << "N" << std::to_string(conn.sink_num) << " ";
+                output_file << "N" << std::to_string(edge.sink_num) << " ";
             }
-            output_file << std::to_string(conn.weight) << std::endl;
+            output_file << std::to_string(edge.weight) << std::endl;
         }
         output_file.close();
     }
@@ -68,14 +69,14 @@ void save_one_frame_immed(const ImageFrameData &data, std::vector<cv::Mat> &imag
 uint32_t make_genetic_color(const Genome &genome)
 {
     uint32_t hash = 0;
-    for (Gene gene : genome)
+    for (uint16_t gene : genome)
     {
-        hash = (hash * 31) + ((gene.source_num << 24) | (gene.sink_num << 16) | (gene.source_type << 8) | gene.sink_type);
+        hash = (hash * 31) + ((((gene >> 1) & 7) << 24) | (((gene >> 5) & 7) << 16) | ((gene & 1) << 8) | ((gene >> 4) & 1));
     }
     return hash;
 }
 
-void save_video_frame(unsigned sim_step, unsigned generation, std::vector<cv::Mat> &image_list)
+void save_video_frame(int sim_step, int generation, std::vector<cv::Mat> &image_list)
 {
     ImageFrameData data;
     data.sim_step = sim_step;
@@ -97,7 +98,7 @@ void save_video_frame(unsigned sim_step, unsigned generation, std::vector<cv::Ma
     save_one_frame_immed(data, image_list);
 }
 
-void save_generation_video(unsigned generation, std::vector<cv::Mat> &image_list)
+void save_generation_video(int generation, std::vector<cv::Mat> &image_list)
 {
     if (image_list.size() > 0)
     {
@@ -112,7 +113,7 @@ void save_generation_video(unsigned generation, std::vector<cv::Mat> &image_list
     }
 }
 
-void save_generation_image(unsigned generation, std::vector<cv::Mat> &image_list)
+void save_generation_image(int generation, std::vector<cv::Mat> &image_list)
 {
     fs::path image_path = BASE_DIR / "images" / ("gen-" + std::to_string(generation) + ".jpg");
     fs::create_directories(image_path.parent_path());

@@ -11,9 +11,9 @@ struct ImageFrameData
     std::vector<uint32_t> indiv_colors;
     std::vector<Coord> barrier_locs;
 };
-void draw_nnet(unsigned generation);
-void save_video_frame(unsigned sim_step, unsigned generation, std::vector<cv::Mat> &image_list);
-void save_generation_video(unsigned generation, std::vector<cv::Mat> &image_list);
-void save_generation_image(unsigned generation, std::vector<cv::Mat> &image_list);
+void draw_nnet(int generation);
+void save_video_frame(int sim_step, int generation, std::vector<cv::Mat> &image_list);
+void save_generation_video(int generation, std::vector<cv::Mat> &image_list);
+void save_generation_image(int generation, std::vector<cv::Mat> &image_list);
 
 #endif

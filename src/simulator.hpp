@@ -15,6 +15,23 @@ public:
     int y;
 };
 
+class Indiv
+{
+private:
+    std::vector<float> forward_pass();
+    float sensor_output(int sensor_num);
+
+public:
+    int index;
+    Coord loc;
+    int age;
+    Genome genome;
+    NNet nnet;
+    Coord last_move_dir;
+    void construct_nnet();
+    void perform_action();
+};
+
 uint32_t random_uint();
 
 constexpr int EMPTY = 0;

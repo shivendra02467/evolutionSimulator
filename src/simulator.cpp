@@ -109,7 +109,7 @@ void simulator()
                     bool passed = peeps[index].loc.x > 128 / 2;
                     // bool passed = peeps[index].loc.x < 128 / 2 && peeps[index].loc.y < 128 / 2;
                     // bool passed = peeps[index].loc.x < 128 - 32 && peeps[index].loc.x > 32 && peeps[index].loc.y < 128 - 32 && peeps[index].loc.y > 32;
-                    if (passed && !peeps[index].nnet.connections.empty())
+                    if (passed && !peeps[index].nnet.edges.empty())
                         parent_genomes.push_back(peeps[index].genome);
                 }
                 if (!parent_genomes.empty())

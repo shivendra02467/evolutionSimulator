@@ -34,23 +34,6 @@ public:
     std::vector<Edge> edges;
 };
 
-class Indiv
-{
-private:
-    std::vector<float> forward_pass();
-    float sensor_output(int sensor_num);
-
-public:
-    int index;
-    Coord loc;
-    int age;
-    Genome genome;
-    NNet nnet;
-    Coord last_move_dir;
-    void construct_nnet();
-    void perform_action();
-};
-
 Genome generate_child_genome(std::vector<Genome> &parent_genomes);
 Genome make_random_genome();
 
