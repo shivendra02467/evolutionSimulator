@@ -1,245 +1,314 @@
 #include <map>
-#include "simulator.h"
+#include "simulator.hpp"
+#include "brain.hpp"
 
-struct Node
+float Indiv::sensor_output(int sensor_num)
 {
-    uint16_t remappedNumber;
-    uint16_t numOutputs;
-    uint16_t numSelfInputs;
-    uint16_t numInputsFromSensorsOrOtherNeurons;
-};
-
-typedef std::map<uint16_t, Node> NodeMap;
-
-typedef std::vector<Gene> ConnectionList;
-
-Gene makeRandomGene()
-{
-    Gene gene;
-
-    gene.sourceType = randomUint() & 1;
-    gene.sourceNum = (uint16_t)(randomUint() % 0x8000);
-    gene.sinkType = randomUint() & 1;
-    gene.sinkNum = (uint16_t)(randomUint() % 0x8000);
-    gene.weight = (randomUint() % 0x10000) - 0x8000;
-
-    return gene;
+    float output = 0.0f;
+    switch (sensor_num)
+    {
+    case 0:
+    {
+        output = age / 300.0f;
+        break;
+    }
+    case 1:
+    {
+        output = loc.x / 127.0f;
+        break;
+    }
+    case 2:
+    {
+        output = loc.y / 127.0f;
+        break;
+    }
+    case 3:
+    {
+        int last_x = last_move_dir.x;
+        output = last_x == 0 ? 0.5f : (last_x == -1 ? 0.0f : 1.0f);
+        break;
+    }
+    case 4:
+    {
+        int last_y = last_move_dir.y;
+        output = last_y == 0 ? 0.5f : (last_y == -1 ? 0.0f : 1.0f);
+        break;
+    }
+    case 5:
+    {
+        int min_dist_x = std::min(loc.x, (127 - loc.x));
+        output = min_dist_x / (128 / 2.0f);
+        break;
+    }
+    case 6:
+    {
+        int min_dist_y = std::min(loc.y, (127 - loc.y));
+        output = min_dist_y / (128 / 2.0f);
+        break;
+    }
+    case 7:
+    {
+        int count = 0;
+        Coord test_loc(loc.x + last_move_dir.x, loc.y + last_move_dir.y);
+        int num_locs = 32;
+        while (num_locs > 0 && test_loc.x < 128 && test_loc.x >= 0 && test_loc.y < 128 && test_loc.y >= 0 && grid[test_loc.x][test_loc.y] == EMPTY)
+        {
+            ++count;
+            test_loc.x = test_loc.x + last_move_dir.x;
+            test_loc.y = test_loc.y + last_move_dir.y;
+            --num_locs;
+        }
+        if (num_locs > 0 && (!(test_loc.x < 128 && test_loc.x >= 0 && test_loc.y < 128 && test_loc.y >= 0) || grid[test_loc.x][test_loc.y] == BARRIER))
+            output = 1.0f;
+        else
+            output = count / 32.0f;
+        break;
+    }
+    }
+    return output;
 }
 
-Genome makeRandomGenome()
+std::vector<float> Indiv::forward_pass()
+{
+    std::vector<float> action_output(8, 0.0);
+    std::vector<float> neuron_accumulators(nnet.neurons.size(), 0.0);
+    bool neuron_outputs_computed = false;
+    for (Gene &conn : nnet.connections)
+    {
+        if (conn.sink_type == ACTION && !neuron_outputs_computed)
+        {
+            for (int index = 0; index < nnet.neurons.size(); ++index)
+                if (nnet.neurons[index].driven)
+                    nnet.neurons[index].output = std::tanh(neuron_accumulators[index]);
+            neuron_outputs_computed = true;
+        }
+        float input_val;
+        if (conn.source_type == SENSOR)
+            input_val = sensor_output(conn.source_num);
+        else
+            input_val = nnet.neurons[conn.source_num % nnet.neurons.size()].output;
+        if (conn.sink_type == ACTION)
+            action_output[conn.sink_num] += input_val * conn.weight_as_float();
+        else
+            neuron_accumulators[conn.sink_num] += input_val * conn.weight_as_float();
+    }
+    return action_output;
+}
+
+void Indiv::perform_action()
+{
+    std::vector<float> action_output = forward_pass();
+    float move_x = (random_uint() % 3 - 1) * action_output[0] + action_output[1] - action_output[2] - last_move_dir.x * action_output[5] + last_move_dir.y * action_output[6] - last_move_dir.y * action_output[7];
+    float move_y = (random_uint() % 3 - 1) * action_output[0] + action_output[3] - action_output[4] - last_move_dir.y * action_output[5] - last_move_dir.x * action_output[6] + last_move_dir.x * action_output[7];
+    move_x = std::tanh(move_x);
+    move_y = std::tanh(move_y);
+    int prob_x = ((random_uint() / (float)0xffffffff) < (std::abs(move_x)));
+    int prob_y = ((random_uint() / (float)0xffffffff) < (std::abs(move_x)));
+    int signum_x = move_x < 0.0 ? -1 : 1;
+    int signum_y = move_y < 0.0 ? -1 : 1;
+    Coord movement_offset(prob_x * signum_x, prob_y * signum_y);
+    Coord new_loc(loc.x + movement_offset.x, loc.y + movement_offset.y);
+    if (new_loc.x < 128 && new_loc.x >= 0 && new_loc.y < 128 && new_loc.y >= 0 && grid[new_loc.x][new_loc.y] == EMPTY)
+    {
+        if (grid[new_loc.x][new_loc.y] == EMPTY)
+        {
+            grid[loc.x][loc.y] = EMPTY;
+            grid[new_loc.x][new_loc.y] = index;
+            loc = new_loc;
+            last_move_dir = Coord(new_loc.x - indiv.loc.x, new_loc.y - indiv.loc.y);
+        }
+    }
+}
+
+Genome make_random_genome()
 {
     Genome genome;
-    for (unsigned n = 0; n < 24; ++n)
+    for (int n = 0; n < 24; ++n)
     {
-        genome.push_back(makeRandomGene());
+        uint16_t gene = random_uint() % 0x10000;
+        genome.push_back(gene);
     }
-
     return genome;
 }
 
-void makeRenumberedConnectionList(ConnectionList &connectionList, const Genome &genome)
+void remove_connections_to_neuron(ConnectionList &connections, NodeMap &node_map, uint16_t neuron_number)
 {
-    connectionList.clear();
-    for (auto const &gene : genome)
+    for (auto it_conn = connections.begin(); it_conn != connections.end();)
     {
-        connectionList.push_back(gene);
-        auto &conn = connectionList.back();
-
-        if (conn.sourceType == NEURON)
+        if (it_conn->sink_type == RELAY && it_conn->sink_num == neuron_number)
         {
-            conn.sourceNum %= 5;
+            if (it_conn->source_type == RELAY)
+            {
+                --(node_map[it_conn->source_num].num_outputs);
+            }
+            it_conn = connections.erase(it_conn);
         }
         else
         {
-            conn.sourceNum %= 9;
-        }
-
-        if (conn.sinkType == NEURON)
-        {
-            conn.sinkNum %= 5;
-        }
-        else
-        {
-            conn.sinkNum %= 9;
+            ++it_conn;
         }
     }
 }
 
-void makeNodeList(NodeMap &nodeMap, const ConnectionList &connectionList)
+void cullUselessNeurons(ConnectionList &connections, NodeMap &node_map)
 {
-    nodeMap.clear();
-
-    for (const Gene &conn : connectionList)
+    bool all_done = false;
+    while (!all_done)
     {
-        if (conn.sinkType == NEURON)
+        all_done = true;
+        for (auto it_neuron = node_map.begin(); it_neuron != node_map.end();)
         {
-            auto it = nodeMap.find(conn.sinkNum);
-            if (it == nodeMap.end())
+            if (it_neuron->second.num_outputs == it_neuron->second.num_self_inputs)
             {
-                nodeMap.insert(std::pair<uint16_t, Node>(conn.sinkNum, {}));
-                it = nodeMap.find(conn.sinkNum);
-                it->second.numOutputs = 0;
-                it->second.numSelfInputs = 0;
-                it->second.numInputsFromSensorsOrOtherNeurons = 0;
-            }
-
-            if (conn.sourceType == NEURON && (conn.sourceNum == conn.sinkNum))
-            {
-                ++(it->second.numSelfInputs);
+                all_done = false;
+                remove_connections_to_neuron(connections, node_map, it_neuron->first);
+                it_neuron = node_map.erase(it_neuron);
             }
             else
             {
-                ++(it->second.numInputsFromSensorsOrOtherNeurons);
+                ++it_neuron;
             }
-        }
-        if (conn.sourceType == NEURON)
-        {
-            auto it = nodeMap.find(conn.sourceNum);
-            if (it == nodeMap.end())
-            {
-                nodeMap.insert(std::pair<uint16_t, Node>(conn.sourceNum, {}));
-                it = nodeMap.find(conn.sourceNum);
-                it->second.numOutputs = 0;
-                it->second.numSelfInputs = 0;
-                it->second.numInputsFromSensorsOrOtherNeurons = 0;
-            }
-            ++(it->second.numOutputs);
         }
     }
 }
 
-void removeConnectionsToNeuron(ConnectionList &connections, NodeMap &nodeMap, uint16_t neuronNumber)
+void Indiv::construct_nnet()
 {
-    for (auto itConn = connections.begin(); itConn != connections.end();)
+    std::vector<Edge> edges;
+    for (const uint16_t &gene : genome)
     {
-        if (itConn->sinkType == NEURON && itConn->sinkNum == neuronNumber)
-        {
-            if (itConn->sourceType == NEURON)
-            {
-                --(nodeMap[itConn->sourceNum].numOutputs);
-            }
-            itConn = connections.erase(itConn);
-        }
-        else
-        {
-            ++itConn;
-        }
+        Edge edge;
+        edge.source_type = (gene & 1);
+        edge.source_num = ((gene >> 1) & 7);
+        edge.sink_type = ((gene >> 4) & 1);
+        edge.sink_num = ((gene >> 5) & 7);
+        edge.weight = (gene >> 8);
+        edges.push_back(edge);
     }
-}
-
-void cullUselessNeurons(ConnectionList &connections, NodeMap &nodeMap)
-{
-    bool allDone = false;
-    while (!allDone)
+    struct Relay
     {
-        allDone = true;
-        for (auto itNeuron = nodeMap.begin(); itNeuron != nodeMap.end();)
+        int new_index;
+        int outputs;
+        int self_inputs;
+        int other_inputs;
+    };
+    std::map<int, Relay> relays;
+
+    for (const Edge &edge : edges)
+    {
+        if (edge.sink_type == RELAY)
         {
-            if (itNeuron->second.numOutputs == itNeuron->second.numSelfInputs)
+            auto it = relays.find(edge.sink_num);
+            if (it == relays.end())
             {
-                allDone = false;
-                removeConnectionsToNeuron(connections, nodeMap, itNeuron->first);
-                itNeuron = nodeMap.erase(itNeuron);
+                relays.insert(std::pair<int, Relay>(edge.sink_num, Relay()));
+                it = relays.find(edge.sink_num);
+                it->second.outputs = 0;
+                it->second.self_inputs = 0;
+                it->second.other_inputs = 0;
             }
+            if (edge.source_type == RELAY && edge.source_num == edge.sink_num)
+                ++(it->second.self_inputs);
             else
+                ++(it->second.other_inputs);
+        }
+        if (edge.source_type == RELAY)
+        {
+            auto it = relays.find(edge.source_num);
+            if (it == relays.end())
             {
-                ++itNeuron;
+                relays.insert(std::pair<int, Relay>(edge.source_num, Relay()));
+                it = relays.find(edge.source_num);
+                it->second.outputs = 0;
+                it->second.self_inputs = 0;
+                it->second.other_inputs = 0;
             }
+            ++(it->second.outputs);
         }
     }
-}
 
-void Indiv::createWiringFromGenome()
-{
-    NodeMap nodeMap;
-    ConnectionList connectionList;
+    cullUselessNeurons(connection_list, node_map);
 
-    makeRenumberedConnectionList(connectionList, genome);
-
-    makeNodeList(nodeMap, connectionList);
-
-    cullUselessNeurons(connectionList, nodeMap);
-
-    uint16_t newNumber = 0;
-    for (auto &node : nodeMap)
+    uint16_t new_number = 0;
+    for (auto &node : node_map)
     {
-        node.second.remappedNumber = newNumber++;
+        node.second.remapped_number = new_number++;
     }
 
     nnet.connections.clear();
 
-    for (auto const &conn : connectionList)
+    for (auto const &conn : connection_list)
     {
-        if (conn.sinkType == NEURON)
+        if (conn.sink_type == RELAY)
         {
             nnet.connections.push_back(conn);
-            auto &newConn = nnet.connections.back();
-            newConn.sinkNum = nodeMap[newConn.sinkNum].remappedNumber;
-            if (newConn.sourceType == NEURON)
+            auto &new_conn = nnet.connections.back();
+            new_conn.sink_num = node_map[new_conn.sink_num].remapped_number;
+            if (new_conn.source_type == RELAY)
             {
-                newConn.sourceNum = nodeMap[newConn.sourceNum].remappedNumber;
+                new_conn.source_num = node_map[new_conn.source_num].remapped_number;
             }
         }
     }
 
-    for (auto const &conn : connectionList)
+    for (auto const &conn : connection_list)
     {
-        if (conn.sinkType == ACTION)
+        if (conn.sink_type == ACTION)
         {
             nnet.connections.push_back(conn);
-            auto &newConn = nnet.connections.back();
-            if (newConn.sourceType == NEURON)
+            auto &new_conn = nnet.connections.back();
+            if (new_conn.source_type == RELAY)
             {
-                newConn.sourceNum = nodeMap[newConn.sourceNum].remappedNumber;
+                new_conn.source_num = node_map[new_conn.source_num].remapped_number;
             }
         }
     }
 
-    nnet.neurons.clear();
-    for (unsigned neuronNum = 0; neuronNum < nodeMap.size(); ++neuronNum)
+    nnet.nodes.clear();
+    for (unsigned neuron_num = 0; neuron_num < node_map.size(); ++neuron_num)
     {
         nnet.neurons.push_back({});
-        nnet.neurons.back().output = initialNeuronOutput();
-        nnet.neurons.back().driven = (nodeMap[neuronNum].numInputsFromSensorsOrOtherNeurons != 0);
+        nnet.neurons.back().output = 0.5f;
+        nnet.neurons.back().driven = (node_map[neuron_num].num_inputs_from_sensors_or_other_neurons != 0);
     }
 }
 
-void randomBitFlip(Genome &genome)
+void random_bit_flip(Genome &genome)
 {
-    unsigned Index = randomUint() % genome.size();
-    uint64_t Bits = ((uint64_t)genome[Index].weight << 32) | ((uint64_t)genome[Index].sourceType << 31) | ((uint64_t)genome[Index].sourceNum << 16) | ((uint64_t)genome[Index].sinkType << 15) | ((uint64_t)genome[Index].sinkNum);
-    unsigned bitIndex = randomUint() % 48;
-    Bits ^= 1 << bitIndex;
-    genome[Index].sinkNum = Bits & 0x8000;
+    unsigned index = random_uint() % genome.size();
+    uint64_t Bits = ((uint64_t)genome[index].weight << 32) | ((uint64_t)genome[index].source_type << 31) | ((uint64_t)genome[index].source_num << 16) | ((uint64_t)genome[index].sink_type << 15) | ((uint64_t)genome[index].sink_num);
+    unsigned bit_index = random_uint() % 48;
+    Bits ^= 1 << bit_index;
+    genome[index].sink_num = Bits & 0x8000;
     Bits = Bits >> 15;
-    genome[Index].sinkType = Bits & 1;
+    genome[index].sink_type = Bits & 1;
     Bits = Bits >> 1;
-    genome[Index].sourceNum = Bits & 0x8000;
+    genome[index].source_num = Bits & 0x8000;
     Bits = Bits >> 15;
-    genome[Index].sourceType = Bits & 1;
+    genome[index].source_type = Bits & 1;
     Bits = Bits >> 1;
-    genome[Index].weight = (Bits & 0x10000) - 0x8000;
+    genome[index].weight = (Bits & 0x10000) - 0x8000;
 }
 
-void applyPointMutations(Genome &genome)
+void apply_point_mutations(Genome &genome)
 {
-    unsigned numberOfGenes = genome.size();
-    while (numberOfGenes-- > 0)
+    unsigned number_of_genes = genome.size();
+    while (number_of_genes-- > 0)
     {
-        if ((randomUint() / (float)0xffffffff) < 0.001)
+        if ((random_uint() / (float)0xffffffff) < 0.001)
         {
-            randomBitFlip(genome);
+            random_bit_flip(genome);
         }
     }
 }
 
-Genome generateChildGenome(std::vector<Genome> &parentGenomes)
+Genome generate_child_genome(std::vector<Genome> &parent_genomes)
 {
     Genome genome;
-    uint16_t parentIdx;
-    parentIdx = randomUint() % parentGenomes.size();
-    const Genome &genome_ = parentGenomes[parentIdx];
+    uint16_t index;
+    index = random_uint() % parent_genomes.size();
+    const Genome &genome_ = parent_genomes[index];
     genome = genome_;
-    applyPointMutations(genome);
+    apply_point_mutations(genome);
     return genome;
 }

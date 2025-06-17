@@ -1,53 +1,13 @@
 #include <random>
 #include "omp.h"
-#include "simulator.h"
-#include "videoWriter.h"
+#include "simulator.hpp"
+#include "video_writer.hpp"
 
-Grid grid;
-Peeps peeps;
+int grid[128][128];
+std::vector<Coord> barrier_locations;
+Indiv peeps[3001];
 
-Coord Dir::asCoord()
-{
-    const Coord DirCoords[9] = {
-        Coord(1, 0),
-        Coord(1, -1),
-        Coord(0, -1),
-        Coord(-1, -1),
-        Coord(-1, 0),
-        Coord(-1, 1),
-        Coord(0, 1),
-        Coord(1, 1),
-        Coord(0, 0)};
-    return DirCoords[(uint8_t)dir_val];
-}
-
-Dir Coord::asDir()
-{
-    constexpr uint16_t tanN = 13860;
-    constexpr uint16_t tanD = 33461;
-    const Dir conversion[16]{
-        Compass::S,
-        Compass::CENTER,
-        Compass::SW,
-        Compass::N,
-        Compass::SE,
-        Compass::E,
-        Compass::N,
-        Compass::N,
-        Compass::N,
-        Compass::N,
-        Compass::W,
-        Compass::NW,
-        Compass::N,
-        Compass::NE,
-        Compass::N,
-        Compass::N};
-    const int32_t xp = x * tanD + y * tanN;
-    const int32_t yp = y * tanD - x * tanN;
-    return conversion[(yp > 0) * 8 + (xp > 0) * 4 + (yp > xp) * 2 + (yp >= -xp)];
-}
-
-uint32_t randomUint()
+unsigned int random_uint()
 {
     static thread_local std::mt19937 generator(
         []
@@ -55,347 +15,140 @@ uint32_t randomUint()
             std::random_device seed;
             return seed();
         }());
-    std::uniform_int_distribution<uint32_t> distribution(0, std::numeric_limits<uint32_t>::max());
+    std::uniform_int_distribution<unsigned int> distribution(0, std::numeric_limits<unsigned int>::max());
     return distribution(generator);
 }
 
-Coord Grid::findEmptyLocation()
+Coord find_empty_location()
 {
     Coord loc;
     while (true)
     {
-        loc.x = randomUint() % 128;
-        loc.y = randomUint() % 128;
-        if (grid.isEmptyAt(loc))
-        {
+        loc.x = random_uint() % 128;
+        loc.y = random_uint() % 128;
+        if (grid[loc.x][loc.y] == EMPTY)
             break;
-        }
     }
     return loc;
 }
 
-void Grid::createBarrier()
+void set_grid()
 {
-    // ##############################################################################################################################
-    // int16_t minX = 128 / 2;
-    // int16_t maxX = minX + 1;
-    // int16_t minY = 128 / 4;
-    // int16_t maxY = minY + 128 / 2;
+    for (int i = 0; i < 128; i++)
+        for (int j = 0; j < 128; j++)
+            grid[i][j] = 0;
 
-    // for (int16_t x = minX; x <= maxX; ++x)
+    int min_x = 128 / 2;
+    int max_x = min_x + 1;
+    int min_y = 128 / 4;
+    int max_y = min_y + 128 / 2;
+
+    for (int x = min_x; x <= max_x; ++x)
+    {
+        for (int y = min_y; y <= max_y; ++y)
+        {
+            grid[x][y] = BARRIER;
+            barrier_locations.push_back(Coord(x, y));
+        }
+    }
+    // int min_x = 128 / 4;
+    // int max_x = min_x + 128 / 2;
+    // int min_y = 128 / 2 + 128 / 4;
+    // int max_y = min_y + 2;
+
+    // for (int x = min_x; x <= max_x; ++x)
     // {
-    //     for (int16_t y = minY; y <= maxY; ++y)
+    //     for (int y = min_y; y <= max_y; ++y)
     //     {
-    //         grid.set(x, y, BARRIER);
-    //         barrierLocations.push_back({x, y});
+    //         grid[x][y] = BARRIER;
+    //         barrier_locations.push_back(Coord(x, y));
     //     }
     // }
-    // ##############################################################################################################################
-    // int16_t minX = 128 / 4;
-    // int16_t maxX = minX + 128 / 2;
-    // int16_t minY = 128 / 2 + 128 / 4;
-    // int16_t maxY = minY + 2;
-
-    // for (int16_t x = minX; x <= maxX; ++x)
-    // {
-    //     for (int16_t y = minY; y <= maxY; ++y)
-    //     {
-    //         grid.set(x, y, BARRIER);
-    //         barrierLocations.push_back({x, y});
-    //     }
-    // }
-}
-
-float Indiv::getSensor(uint16_t sensorNum)
-{
-    float sensorVal = 0.0;
-
-    switch (sensorNum)
-    {
-    case 0:
-    {
-        sensorVal = (float)age / 300;
-        break;
-    }
-    case 1:
-    {
-        sensorVal = (float)loc.x / (128 - 1);
-        break;
-    }
-    case 2:
-    {
-        sensorVal = (float)loc.y / (128 - 1);
-        break;
-    }
-    case 3:
-    {
-        auto lastX = lastMoveDir.asCoord().x;
-        sensorVal = lastX == 0 ? 0.5 : (lastX == -1 ? 0.0 : 1.0);
-        break;
-    }
-    case 4:
-    {
-        auto lastY = lastMoveDir.asCoord().y;
-        sensorVal = lastY == 0 ? 0.5 : (lastY == -1 ? 0.0 : 1.0);
-        break;
-    }
-    case 5:
-    {
-        int minDistX = std::min<int>(loc.x, (128 - loc.x) - 1);
-        sensorVal = minDistX / (128 / 2.0);
-        break;
-    }
-    case 6:
-    {
-        int minDistY = std::min<int>(loc.y, (128 - loc.y) - 1);
-        sensorVal = minDistY / (128 / 2.0);
-        break;
-    }
-    case 7:
-    {
-        unsigned count = 0;
-        Coord testLoc;
-        testLoc.x = loc.x + lastMoveDir.asCoord().x;
-        testLoc.y = loc.y + lastMoveDir.asCoord().y;
-        unsigned numLocsToTest = 32;
-        while (numLocsToTest > 0 && grid.isInBounds(testLoc) && grid.isEmptyAt(testLoc))
-        {
-            ++count;
-            testLoc.x = testLoc.x + lastMoveDir.asCoord().x;
-            testLoc.y = testLoc.y + lastMoveDir.asCoord().y;
-            --numLocsToTest;
-        }
-        if (numLocsToTest > 0 && (!grid.isInBounds(testLoc) || grid.isBarrierAt(testLoc)))
-        {
-            sensorVal = (float)1;
-        }
-        else
-        {
-            sensorVal = count / (float)32;
-        }
-        break;
-    }
-    case 8:
-    {
-        unsigned count = 0;
-        Coord testLoc;
-        testLoc.x = loc.x + lastMoveDir.asCoord().x;
-        testLoc.y = loc.y + lastMoveDir.asCoord().y;
-        unsigned numLocsToTest = 32;
-        while (numLocsToTest > 0 && grid.isInBounds(testLoc) && !grid.isBarrierAt(testLoc))
-        {
-            ++count;
-            testLoc.x = testLoc.x + lastMoveDir.asCoord().x;
-            testLoc.y = testLoc.y + lastMoveDir.asCoord().y;
-            --numLocsToTest;
-        }
-        if (numLocsToTest > 0 && !grid.isInBounds(testLoc))
-        {
-            sensorVal = (float)1;
-        }
-        else
-        {
-            sensorVal = count / (float)32;
-        }
-        break;
-    }
-    }
-    return sensorVal;
-}
-
-std::vector<float> Indiv::feedForward()
-{
-    std::vector<float> actionLevels(9, 0.0);
-
-    std::vector<float> neuronAccumulators(nnet.neurons.size(), 0.0);
-
-    bool neuronOutputsComputed = false;
-    for (Gene &conn : nnet.connections)
-    {
-        if (conn.sinkType == ACTION && !neuronOutputsComputed)
-        {
-            for (unsigned neuronIndex = 0; neuronIndex < nnet.neurons.size(); ++neuronIndex)
-            {
-                if (nnet.neurons[neuronIndex].driven)
-                {
-                    nnet.neurons[neuronIndex].output = std::tanh(neuronAccumulators[neuronIndex]);
-                }
-            }
-            neuronOutputsComputed = true;
-        }
-        float inputVal;
-        if (conn.sourceType == SENSOR)
-        {
-            inputVal = getSensor(conn.sourceNum);
-        }
-        else
-        {
-            inputVal = nnet.neurons[conn.sourceNum % nnet.neurons.size()].output;
-        }
-
-        if (conn.sinkType == ACTION)
-        {
-            actionLevels[conn.sinkNum] += inputVal * conn.weightAsFloat();
-        }
-        else
-        {
-            neuronAccumulators[conn.sinkNum] += inputVal * conn.weightAsFloat();
-        }
-    }
-    return actionLevels;
-}
-
-void simStepAction(Indiv &indiv)
-{
-    auto actionLevels = indiv.feedForward();
-
-    Coord lastMoveOffset = indiv.lastMoveDir.asCoord();
-    float moveX = 0;
-    float moveY = 0;
-
-    float level;
-    Coord offset;
-    Dir temp;
-
-    level = actionLevels[0];
-    temp.dir_val = (Compass)(randomUint() % 8);
-    offset = temp.asCoord();
-    moveX += offset.x * level;
-    moveY += offset.y * level;
-
-    moveX += actionLevels[1];
-
-    moveX -= actionLevels[2];
-
-    moveY += actionLevels[3];
-
-    moveY -= actionLevels[4];
-
-    level = actionLevels[5];
-    moveX += lastMoveOffset.x * level;
-    moveY += lastMoveOffset.y * level;
-
-    level = actionLevels[6];
-    moveX -= lastMoveOffset.x * level;
-    moveY -= lastMoveOffset.y * level;
-
-    level = actionLevels[7];
-    temp.dir_val = (Compass)(((uint8_t)indiv.lastMoveDir.dir_val + 1) % 8);
-    offset = temp.asCoord();
-    moveX += offset.x * level;
-    moveY += offset.y * level;
-
-    level = actionLevels[8];
-    temp.dir_val = (Compass)(((uint8_t)indiv.lastMoveDir.dir_val - 1) % 8);
-    offset = temp.asCoord();
-    moveX += offset.x * level;
-    moveY += offset.y * level;
-
-    moveX = std::tanh(moveX);
-    moveY = std::tanh(moveY);
-    int16_t probX = (int16_t)((randomUint() / (float)0xffffffff) < (std::abs(moveX)));
-    int16_t probY = (int16_t)((randomUint() / (float)0xffffffff) < (std::abs(moveX)));
-    int16_t signumX = moveX < 0.0 ? -1 : 1;
-    int16_t signumY = moveY < 0.0 ? -1 : 1;
-    Coord movementOffset = {(int16_t)(probX * signumX), (int16_t)(probY * signumY)};
-    Coord newLoc;
-    newLoc.x = indiv.loc.x + movementOffset.x;
-    newLoc.y = indiv.loc.y + movementOffset.y;
-    if (grid.isInBounds(newLoc) && grid.isEmptyAt(newLoc))
-    {
-        Coord temp;
-        temp.x = newLoc.x - indiv.loc.x;
-        temp.y = newLoc.y - indiv.loc.y;
-        Dir moveDir = temp.asDir();
-        if (grid.isEmptyAt(newLoc))
-        {
-            grid.set(indiv.loc, 0);
-            grid.set(newLoc, indiv.index);
-            indiv.loc = newLoc;
-            indiv.lastMoveDir = moveDir;
-        }
-    }
 }
 
 void simulator()
 {
-    grid.init(128, 128);
-    peeps.init(3000);
-    unsigned generation = 0;
-
-    grid.zeroFill();
-    grid.createBarrier();
-
-    for (uint16_t index = 1; index <= 3000; ++index)
+    int generation = 0;
+    set_grid();
+    for (int index = 1; index <= 3000; ++index)
     {
-        peeps[index].initialize(index, grid.findEmptyLocation(), makeRandomGenome());
-        nnetGraph(generation);
+        Coord loc = find_empty_location();
+        peeps[index].index = index;
+        peeps[index].loc = loc;
+        peeps[index].age = 0;
+        peeps[index].last_move_dir = Coord(random_uint() % 3 - 1, random_uint() % 3 - 1);
+        peeps[index].genome = make_random_genome();
+        peeps[index].construct_nnet();
+        grid[loc.x][loc.y] = index;
     }
-    std::vector<cv::Mat> imageList;
+    std::vector<cv::Mat> image_list;
 #pragma omp parallel num_threads(4) default(shared)
     {
         while (generation < 100)
         {
-            for (unsigned simStep = 0; simStep < 300; ++simStep)
+            for (int sim_step = 0; sim_step < 300; ++sim_step)
             {
 #pragma omp for schedule(auto)
-                for (unsigned indivIndex = 1; indivIndex <= 3000; ++indivIndex)
+                for (int index = 1; index <= 3000; ++index)
                 {
-                    peeps[indivIndex].age++;
-                    simStepAction(peeps[indivIndex]);
+                    peeps[index].age++;
+                    peeps[index].perform_action();
                 }
 #pragma omp single
-                saveVideoFrame(simStep, generation, imageList);
+                save_video_frame(sim_step, generation, image_list);
             }
 #pragma omp single
             {
-                saveGenerationVideo(generation, imageList);
-                saveGenerationImage(generation, imageList);
-                imageList.clear();
-                std::vector<uint16_t> parents;
-                std::vector<Genome> parentGenomes;
-                for (uint16_t index = 1; index <= 3000; ++index)
+                save_generation_video(generation, image_list);
+                save_generation_image(generation, image_list);
+                draw_nnet(generation);
+                image_list.clear();
+                std::vector<Genome> parent_genomes;
+                for (int index = 1; index <= 3000; ++index)
                 {
-                    // #####################################################################################################################
                     bool passed = peeps[index].loc.x > 128 / 2;
                     // bool passed = peeps[index].loc.x < 128 / 2 && peeps[index].loc.y < 128 / 2;
                     // bool passed = peeps[index].loc.x < 128 - 32 && peeps[index].loc.x > 32 && peeps[index].loc.y < 128 - 32 && peeps[index].loc.y > 32;
-
                     if (passed && !peeps[index].nnet.connections.empty())
-                    {
-                        parents.push_back(index);
-                    }
+                        parent_genomes.push_back(peeps[index].genome);
                 }
-                for (const uint16_t &parent : parents)
+                if (!parent_genomes.empty())
                 {
-                    parentGenomes.push_back(peeps[parent].genome);
-                }
-                if (!parentGenomes.empty())
-                {
-                    grid.zeroFill();
-                    grid.createBarrier();
-
-                    for (uint16_t index = 1; index <= 3000; ++index)
+                    for (int index = 1; index <= 3000; ++index)
                     {
-                        peeps[index].initialize(index, grid.findEmptyLocation(), generateChildGenome(parentGenomes));
-                        nnetGraph(generation);
+                        Coord loc = find_empty_location();
+                        peeps[index].index = index;
+                        peeps[index].loc = loc;
+                        peeps[index].age = 0;
+                        peeps[index].last_move_dir = Coord(random_uint() % 3 - 1, random_uint() % 3 - 1);
+                        peeps[index].genome = generate_child_genome(parent_genomes);
+                        peeps[index].construct_nnet();
+                        grid[loc.x][loc.y] = index;
                     }
                 }
                 else
                 {
-                    grid.zeroFill();
-                    grid.createBarrier();
-
-                    for (uint16_t index = 1; index <= 3000; ++index)
+                    for (int index = 1; index <= 3000; ++index)
                     {
-                        peeps[index].initialize(index, grid.findEmptyLocation(), makeRandomGenome());
-                        nnetGraph(generation);
+                        Coord loc = find_empty_location();
+                        peeps[index].index = index;
+                        peeps[index].loc = loc;
+                        peeps[index].age = 0;
+                        peeps[index].last_move_dir = Coord(random_uint() % 3 - 1, random_uint() % 3 - 1);
+                        peeps[index].genome = make_random_genome();
+                        peeps[index].construct_nnet();
+                        grid[loc.x][loc.y] = index;
                     }
                 }
-                unsigned numberSurvivors = parentGenomes.size();
-                std::cout << (numberSurvivors * 100) / (float)3000 << std::endl;
+                set_grid();
+                std::cout << (parent_genomes.size() * 100) / 3000.0f << std::endl;
                 generation++;
             }
         }
     }
+}
+
+int main()
+{
+    simulator();
 }
