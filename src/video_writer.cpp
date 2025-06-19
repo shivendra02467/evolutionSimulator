@@ -51,7 +51,7 @@ void draw_nnet(int generation)
             else
                 relays.insert(dst);
         }
-        int offset_x = g * graph_width;
+        int offset_x = index * graph_width;
         int center_x = offset_x + graph_width / 2;
         int center_y = graph_height / 2;
         auto assign_positions = [&](const std::set<std::string> &nodes, int y_pos, bool circular = false)
@@ -85,11 +85,11 @@ void draw_nnet(int generation)
             const cv::Point &p2 = positions[dst];
             if (src == dst)
             {
-                cv::ellipse(full_img, p1 + cv::Point(0, -30), cv::Size(15, 10), 0, 0, 360, cv::Scalar(0, 0, 255), 2);
+                cv::ellipse(full_img, p1 + cv::Point(0, -25), cv::Size(25, 25), 0, 0, 360, cv::Scalar(0, 0, 0), 2, cv::LINE_AA);
             }
             else
             {
-                cv::arrowedLine(full_img, p1, p2, cv::Scalar(0, 0, 0), 2, cv::LINE_AA, 0, 0.1);
+                cv::line(full_img, p1, p2, cv::Scalar(0, 0, 0), 2, cv::LINE_AA, 0);
             }
         }
         auto draw_nodes = [&](const std::set<std::string> &node_set, const cv::Scalar &color)
