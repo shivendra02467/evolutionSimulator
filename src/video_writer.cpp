@@ -11,32 +11,103 @@ void draw_nnet(int generation)
 {
     for (int index = 1; index <= 3; ++index)
     {
-        fs::path graph_path = BASE_DIR / "draw_nnet" / "nnetText" / ("gen-" + std::to_string(generation) + "-index-" + std::to_string(index) + ".txt");
+        fs::path graph_path = BASE_DIR / "draw_nnet" / "nnet_text" / ("gen-" + std::to_string(generation) + "-index-" + std::to_string(index) + ".txt");
         fs::create_directories(graph_path.parent_path());
         std::ofstream output_file(graph_path);
         for (auto &edge : peeps[index].nnet.edges)
         {
             if (edge.source_type == SENSOR)
-            {
                 output_file << "S" << std::to_string(edge.source_num) << " ";
-            }
             else
-            {
-                output_file << "N" << std::to_string(edge.source_num) << " ";
-            }
+                output_file << "R" << std::to_string(edge.source_num) << " ";
 
             if (edge.sink_type == ACTION)
-            {
                 output_file << "A" + std::to_string(edge.sink_num) << " ";
-            }
             else
-            {
-                output_file << "N" << std::to_string(edge.sink_num) << " ";
-            }
+                output_file << "R" << std::to_string(edge.sink_num) << " ";
             output_file << std::to_string(edge.weight) << std::endl;
         }
         output_file.close();
     }
+    const int graph_width = 1600;
+    const int graph_height = 1200;
+    cv::Mat full_img(graph_height, graph_width * 3, CV_8UC3, cv::Scalar(255, 255, 255));
+    for (int index = 0; index < 3; ++index)
+    {
+        const auto &edges = peeps[1 + index].nnet.edges;
+        std::set<std::string> sensors, relays, actions;
+        std::map<std::string, cv::Point> positions;
+        for (const auto &e : edges)
+        {
+            std::string src = (e.source_type == 1 ? "S" : "R") + std::to_string(e.source_num);
+            std::string dst = (e.sink_type == 1 ? "A" : "R") + std::to_string(e.sink_num);
+            if (e.source_type == 1)
+                sensors.insert(src);
+            else
+                relays.insert(src);
+
+            if (e.sink_type == 1)
+                actions.insert(dst);
+            else
+                relays.insert(dst);
+        }
+        int offset_x = g * graph_width;
+        int center_x = offset_x + graph_width / 2;
+        int center_y = graph_height / 2;
+        auto assign_positions = [&](const std::set<std::string> &nodes, int y_pos, bool circular = false)
+        {
+            int count = nodes.size();
+            int idx = 0;
+            for (const auto &label : nodes)
+            {
+                cv::Point pt;
+                if (circular)
+                {
+                    double angle = 2 * M_PI * idx / count;
+                    pt = cv::Point(center_x + 500 * std::cos(angle), center_y + 500 * std::sin(angle));
+                }
+                else
+                {
+                    pt = cv::Point(offset_x + 400 + (idx + 1) * graph_width / (2 * count + 1), y_pos);
+                }
+                positions[label] = pt;
+                idx++;
+            }
+        };
+        assign_positions(sensors, 500);
+        assign_positions(relays, 0, true);
+        assign_positions(actions, graph_height - 500);
+        for (const auto &e : edges)
+        {
+            std::string src = (e.source_type == 1 ? "S" : "R") + std::to_string(e.source_num);
+            std::string dst = (e.sink_type == 1 ? "A" : "R") + std::to_string(e.sink_num);
+            const cv::Point &p1 = positions[src];
+            const cv::Point &p2 = positions[dst];
+            if (src == dst)
+            {
+                cv::ellipse(full_img, p1 + cv::Point(0, -30), cv::Size(15, 10), 0, 0, 360, cv::Scalar(0, 0, 255), 2);
+            }
+            else
+            {
+                cv::arrowedLine(full_img, p1, p2, cv::Scalar(0, 0, 0), 2, cv::LINE_AA, 0, 0.1);
+            }
+        }
+        auto draw_nodes = [&](const std::set<std::string> &node_set, const cv::Scalar &color)
+        {
+            for (const auto &label : node_set)
+            {
+                const cv::Point &pos = positions[label];
+                cv::circle(full_img, pos, 18, color, -1);
+                cv::putText(full_img, label, pos + cv::Point(-10, 6), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255), 1);
+            }
+        };
+        draw_nodes(sensors, cv::Scalar(255, 0, 0)); // Blue = Sensor
+        draw_nodes(relays, cv::Scalar(0, 255, 0));  // Green = Relay
+        draw_nodes(actions, cv::Scalar(0, 0, 255)); // Red = Action
+    }
+    fs::path graph_path1 = BASE_DIR / "draw_nnet" / ("gen-" + std::to_string(generation) + ".png");
+    fs::create_directories(graph_path1.parent_path());
+    cv::imwrite(graph_path1, full_img);
 }
 
 void save_one_frame_immed(const ImageFrameData &data, std::vector<cv::Mat> &image_list)
