@@ -4,14 +4,13 @@ This project demonstrates simple **Genetic Algorithm (GA)** through evolution of
 
 ## Features
 
-- Obstacle-avoidance and goal-reaching behavior in a 2D grid
-- Graph-based brain representation saved per individual per generation
 - Outputs:
   - `.ncol` format text and image of sample nnet graphs of each generation
   - A full video of all steps of each generation
-  - An image of last step of each generation
-- Cross-platform: tested on **Windows (MinGW)** and **Arch Linux BTW**
+  - An image of last step of each generation\
 - Minimal dependencies: just OpenCV and CMake
+- CMake as build system
+- OpenMP for multithreading
 
 ## Build Instructions
 
@@ -19,7 +18,7 @@ This project demonstrates simple **Genetic Algorithm (GA)** through evolution of
 
 install opencv cmake then
 ```bash
-git clone https://github.com/yourusername/evolutionSimulator.git
+git clone https://github.com/shivendra02467/evolutionSimulator.git
 cd evolutionSimulator
 mkdir build && cd build
 cmake ..
@@ -31,7 +30,7 @@ make
 (if using MinGW-w64, OpenCV build with MinGW)
 
 ```bash
-git clone https://github.com/yourusername/evolutionSimulator.git
+git clone https://github.com/shivendra02467/evolutionSimulator.git
 cd evolutionSimulator
 mkdir build
 cd build
