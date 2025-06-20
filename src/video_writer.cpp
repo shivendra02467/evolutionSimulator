@@ -107,7 +107,7 @@ void draw_nnet(int generation)
     }
     fs::path graph_path1 = BASE_DIR / "draw_nnet" / ("gen-" + std::to_string(generation) + ".png");
     fs::create_directories(graph_path1.parent_path());
-    cv::imwrite(graph_path1, full_img);
+    cv::imwrite(graph_path1.string(), full_img);
 }
 
 void save_one_frame_immed(const ImageFrameData &data, std::vector<cv::Mat> &image_list)
