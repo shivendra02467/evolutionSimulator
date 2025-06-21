@@ -20,7 +20,8 @@ install opencv cmake then
 ```bash
 git clone https://github.com/shivendra02467/evolutionSimulator.git
 cd evolutionSimulator
-mkdir build && cd build
+mkdir build
+cd build
 cmake ..
 make
 ./evolutionSimulator
