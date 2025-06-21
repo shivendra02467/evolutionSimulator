@@ -28,8 +28,8 @@ make
 ```
 
 ### Windows
-(if using MinGW, OpenCV build with MinGW)
 
+if using MinGW, OpenCV build with MinGW
 ```bash
 git clone https://github.com/shivendra02467/evolutionSimulator.git
 cd evolutionSimulator
